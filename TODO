@@ -1,0 +1,11 @@
+Use/test as-is and evaluate:
+  What (if any) functionality needs to be added?
+  Consider: what you have/cofree in particular might be a bit stifling/inflexible.
+  Alternatives: Abstract over exactly what the container is for cofree annotations via optics?
+  Alternatives: Functor composition/products (DALT, etc.).
+
+Polish:
+- Fix dep bounds
+- Flesh out Readme
+- CI
+

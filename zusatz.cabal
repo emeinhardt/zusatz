@@ -1,0 +1,109 @@
+cabal-version:         3.0
+name:                  zusatz
+version:               0.1.0.0
+stability:             experimental
+synopsis:     
+  Companion to 'Ersatz' that facilitates analysis of logical formulas.
+description:  
+  A companion to 'Ersatz' that facilitates analyzing and manipulating logical 
+  formulas.
+
+  The motivating use case is debugging: given a formula that a solver has found 
+  a model for, /why/ is the formula true under the model? The main module 
+  offers functions for annotating and filtering a propositional formula AST that 
+  hide information irrelevant to the truth value of the topmost node in the 
+  tree. The formula AST also permits labelling any @Formula@/@FormulaF@ node 
+  with a textual label.
+
+  For example, in the formula `ex` below, the entire outer `leftBranch` is 
+  irrelevant to the truth value of `ex`, and the left half of the outer 
+  `rightBranch` is similarly irrelevant:
+
+   >> leftBranch = (true && true) ∷ Formula
+   >> rightBranch = (true && false) ∷ Formula
+   >> ex = leftBranch && rightBranch
+   >> pPrint ex
+   > And
+   > ( And ( Lit True ) ( Lit True  ) )
+   > ( And ( Lit True ) ( Lit False ) )
+   >> :t withEval
+   > withEval :: Formula -> Cofree FormulaF Bool
+   >> :t why
+   > why :: Cofree FormulaF Bool -> Cofree FormulaF (Maybe Bool)
+   >> pPrint $ why . withEval $ ex
+   > Just False :< AndF
+   >     ( Nothing    :< AndF ( Nothing :< LitF True ) ( Nothing    :< LitF True  ) )
+   >     ( Just False :< AndF ( Nothing :< LitF True ) ( Just False :< LitF False ) )
+   >> pPrint $ quiet . why . withEval $ ex
+   > Just False :< MaybeT
+   >   ( AndF Nothing
+   >          ( Just ( Just False :< MaybeT
+   >                   ( AndF Nothing
+   >                     ( Just ( Just False :< MaybeT ( LitF False ) ) ) ) ) ) )
+
+   While the motivating use case to-date is debugging, the same infrastructure 
+   (recursion schemes) needed for that may be useful for other purposes related 
+   to analysis of logical formulas and is exposed.
+license:               MIT
+license-file:          LICENSE
+author:                Eric Meinhardt
+maintainer:            ericmeinhardt@gmail.com
+copyright:             2024
+homepage:              https://github.com/emeinhardt/zusatz
+bug-reports:           https://github.com/emeinhardt/zusatz/issues
+category:              Logic, Data
+build-type:            Simple
+extra-doc-files:       CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: https://github.com/emeinhardt/zusatz/zusatz.git
+
+common warnings
+  ghc-options:
+    -Wall -Wdefault -Wno-orphans -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -Wcompat
+
+library
+  -- 'zusatz' is not currently intended to support any combination of 
+  -- GHC/base/cabal older than
+  --  8.8.3/4.13.0.0/3.0.1.0
+  import:              warnings
+  default-language:    Haskell2010
+  default-extensions:
+  -- This collection consists of NoImplicitPrelude + UnicodeSyntax + a subset
+  -- of GHC2021.
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DerivingStrategies
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    ImportQualifiedPost
+    NoImplicitPrelude
+    ScopedTypeVariables
+    TypeApplications
+    TypeFamilies
+    UnicodeSyntax
+  hs-source-dirs:      src
+  exposed-modules:
+    Zusatz.Formula
+    Zusatz.Formula.Class
+    Zusatz.Formula.Cofree
+  build-depends:
+      -- TODO Go through bounds more thoroughly.
+      base                  >= 4.13.0.0 && <5.0
+    , base-unicode-symbols  ==0.2.*
+    , composition           ==1.0.*
+    , containers            >= 0.2.0.1  && <0.8
+    , ersatz                >= 0.5
+    , recursion-schemes     >= 5.2
+    , free                  >= 5.1
+    , comonad               >= 5.0
+    , data-fix
+    , transformers-compat
+    , transformers
+    , mtl
+     -- dev dep
+    , pretty-simple         ==4.1.*
+

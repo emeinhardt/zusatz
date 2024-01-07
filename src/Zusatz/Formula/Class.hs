@@ -20,6 +20,7 @@ module Zusatz.Formula.Class
   , Disj (Disj, unDisj)
   , fromFormula
   , neg
+  , isLabeled
 
   , FormulaF ( IdF
              , LitF
@@ -37,6 +38,8 @@ module Zusatz.Formula.Class
              )
   , fromFormulaAlg
   , negAlg
+  , isLabeledF
+
   , FFormula
   , mkFFormula
   , forgetFFormula
@@ -76,11 +79,8 @@ import Data.Functor.Classes.Generic
   , liftShowsPrecDefault
   )
 
--- import Data.Fix qualified as FX
 import Data.Fix
-  ( Fix (Fix
-        -- , unFix
-        )
+  ( Fix 
   )
 
 import qualified Data.Foldable as F
@@ -121,7 +121,13 @@ import Ersatz.Bit
   , any
   )
 
--- | A free Boolean algebra.
+-- | Optionally identifier-labeled propositional formulas. This fragment of 
+-- @ersatz@'s 'Boolean' interface only includes inspectable representations: it
+-- intentionally /excludes/ any constructors that would wrap a function — 
+-- 'all', 'any', or (novel relative to 'Boolean') anything like a predicate.
+--
+-- A salient extension or alternative to this might be a 'Category' or 
+-- 'Semiarrow'-like type that can represent Boolean circuits.
 data Formula =
     Id      !String !Formula
   | Lit     !Bool
@@ -180,6 +186,12 @@ instance Boolean Formula where
 fromFormula ∷ (Boolean b) ⇒ Formula → b
 fromFormula = cata fromFormulaAlg
 
+-- | Predicate indicating whether the 'Formula' term is labeled with an
+-- identifier.
+isLabeled ∷ Formula → Bool
+isLabeled (Id _ _) = True
+isLabeled _        = False
+
 
 -- | The base functor for 'Formula'.
 data FormulaF a =
@@ -196,7 +208,8 @@ data FormulaF a =
   | OrsF     !(Seq a)
   | NandsF   !(Seq a)
   | NorsF    !(Seq a)
-  deriving stock (Eq, Ord, Show, Generic, Functor, Generic1)
+  deriving stock (Eq, Ord, Show, Generic, Generic1)
+  deriving stock (Functor, Foldable, Traversable)
 
 instance Eq1 FormulaF where
   liftEq = liftEqDefault
@@ -220,13 +233,13 @@ instance Recursive Formula where
   project (Implies p q  ) = ImpliesF p q
   project (Iff     p q  ) = IffF     p q
   project (Ite     f t b) = IteF f t b
-  project (Not     b    ) = NotF b
+  project (Not     f    ) = NotF f
   project (Lit     b    ) = LitF b
-  project (Ands    bs   ) = AndsF  bs
-  project (Ors     bs   ) = OrsF   bs
-  project (Nands   bs   ) = NandsF bs
-  project (Nors    bs   ) = NorsF  bs
-  project (Id      lab b) = IdF    lab b
+  project (Ands    fs   ) = AndsF  fs
+  project (Ors     fs   ) = OrsF   fs
+  project (Nands   fs   ) = NandsF fs
+  project (Nors    fs   ) = NorsF  fs
+  project (Id      lab f) = IdF    lab f
 
 instance Corecursive Formula where
   embed (AndF     p q  ) = And     p q
@@ -235,13 +248,13 @@ instance Corecursive Formula where
   embed (ImpliesF p q  ) = Implies p q
   embed (IffF     p q  ) = Iff     p q
   embed (IteF     f t b) = Ite f t b
-  embed (NotF     b    ) = Not b
+  embed (NotF     f    ) = Not f
   embed (LitF     b    ) = Lit b
-  embed (AndsF    bs   ) = Ands  bs
-  embed (OrsF     bs   ) = Ors   bs
-  embed (NandsF   bs   ) = Nands bs
-  embed (NorsF    bs   ) = Nors  bs
-  embed (IdF      lab b) = Id    lab b
+  embed (AndsF    fs   ) = Ands  fs
+  embed (OrsF     fs   ) = Ors   fs
+  embed (NandsF   fs   ) = Nands fs
+  embed (NorsF    fs   ) = Nors  fs
+  embed (IdF      lab f) = Id    lab f
 
 -- | Algebra for folding any 'FormulaF' formula into a 'Boolean' instance.
 fromFormulaAlg ∷ ∀ b. (Boolean b) ⇒ FormulaF b → b
@@ -251,13 +264,13 @@ fromFormulaAlg (XorF     p q  ) =  p `xor` q
 fromFormulaAlg (ImpliesF p q  ) =  p  ==>  q
 fromFormulaAlg (IffF     p q  ) = (p  ==>  q) && (q ==> p)
 fromFormulaAlg (IteF     f t b) = choose f t b
-fromFormulaAlg (NotF     b    ) = not  b
+fromFormulaAlg (NotF     f    ) = not  f
 fromFormulaAlg (LitF     b    ) = bool b
-fromFormulaAlg (AndsF    bs   ) = and  bs
-fromFormulaAlg (OrsF     bs   ) = or   bs
-fromFormulaAlg (NandsF   bs   ) = nand bs
-fromFormulaAlg (NorsF    bs   ) = nor  bs
-fromFormulaAlg (IdF    _ b    ) = b
+fromFormulaAlg (AndsF    fs   ) = and  fs
+fromFormulaAlg (OrsF     fs   ) = or   fs
+fromFormulaAlg (NandsF   fs   ) = nand fs
+fromFormulaAlg (NorsF    fs   ) = nor  fs
+fromFormulaAlg (IdF    _ f    ) = f
 
 -- | Flip the truth values of all literals in a formula.
 neg ∷ Formula → Formula
@@ -269,6 +282,12 @@ negAlg ∷ FormulaF Formula → Formula
 negAlg (LitF True ) = Lit False
 negAlg (LitF False) = Lit True
 negAlg w            = embed w
+
+-- | Predicate indicating whether the 'FormulaF' term is labeled with an
+-- identifier.
+isLabeledF ∷ FormulaF a → Bool
+isLabeledF (IdF _ _) = True
+isLabeledF _         = False
 
 
 type FFormula = Fix FormulaF

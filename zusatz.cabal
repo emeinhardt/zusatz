@@ -5,45 +5,91 @@ stability:             experimental
 synopsis:     
   Companion to 'Ersatz' that facilitates analysis of logical formulas.
 description:  
-  A companion to 'Ersatz' that facilitates analyzing and manipulating logical 
-  formulas.
+  A companion to 'Ersatz' that facilitates analyzing and manipulating 
+  propositional formulas:
+
+  > data Formula =
+  >     Id      String Formula
+  >   | Lit     Bool
+  >   | And     Formula Formula
+  >   | Or      Formula Formula
+  >   | Implies Formula Formula
+  >   | Not     Formula
+  >   | Xor     Formula Formula
+  >   | Ite     Formula Formula Formula
+  >   | Iff     Formula Formula
+  >   | Ands    (Seq Formula)
+  >   | Ors     (Seq Formula)
+  >   | Nands   (Seq Formula)
+  >   | Nors    (Seq Formula)
 
   The motivating use case is debugging: given a formula that a solver has found 
-  a model for, /why/ is the formula true under the model? The main module 
-  offers functions for annotating and filtering a propositional formula AST that 
-  hide information irrelevant to the truth value of the topmost node in the 
-  tree. The formula AST also permits labelling any @Formula@/@FormulaF@ node 
-  with a textual label.
+  a model for, /why/ is the formula true under the model? The 
+  'Zusatz.Formula.Cofree' module offers functions for annotating and filtering a 
+  propositional formula AST that hide information irrelevant to the truth value 
+  of the topmost node in the tree. The formula AST also permits labelling any 
+  @Formula@/@FormulaF@ node with a textual label.
 
   For example, in the formula `ex` below, the entire outer `leftBranch` is 
   irrelevant to the truth value of `ex`, and the left half of the outer 
   `rightBranch` is similarly irrelevant:
 
-   >> leftBranch = (true && true) ∷ Formula
-   >> rightBranch = (true && false) ∷ Formula
-   >> ex = leftBranch && rightBranch
-   >> pPrint ex
-   > And
-   > ( And ( Lit True ) ( Lit True  ) )
-   > ( And ( Lit True ) ( Lit False ) )
-   >> :t withEval
-   > withEval :: Formula -> Cofree FormulaF Bool
-   >> :t why
-   > why :: Cofree FormulaF Bool -> Cofree FormulaF (Maybe Bool)
-   >> pPrint $ why . withEval $ ex
-   > Just False :< AndF
-   >     ( Nothing    :< AndF ( Nothing :< LitF True ) ( Nothing    :< LitF True  ) )
-   >     ( Just False :< AndF ( Nothing :< LitF True ) ( Just False :< LitF False ) )
-   >> pPrint $ quiet . why . withEval $ ex
-   > Just False :< MaybeT
-   >   ( AndF Nothing
-   >          ( Just ( Just False :< MaybeT
-   >                   ( AndF Nothing
-   >                     ( Just ( Just False :< MaybeT ( LitF False ) ) ) ) ) ) )
+   >>> leftBranch = (true && true) ∷ Formula
+   >>> rightBranch = (true && false) ∷ Formula
+   >>> ex = leftBranch && rightBranch
+   >>> pPrint ex
+     And
+     ( And ( Lit True ) ( Lit True  ) )
+     ( And ( Lit True ) ( Lit False ) )
+   >>> :t withEval
+     withEval :: Formula -> Cofree FormulaF Bool
+   >>> :t why
+     why :: Cofree FormulaF Bool -> Cofree FormulaF (Maybe Bool)
+   >>> pPrint $ why . withEval $ ex
+     Just False :< AndF
+         ( Nothing    :< AndF ( Nothing :< LitF True ) ( Nothing    :< LitF True  ) )
+         ( Just False :< AndF ( Nothing :< LitF True ) ( Just False :< LitF False ) )
+   >>> pPrint $ quiet . why . withEval $ ex
+     Just False :< MaybeT
+       ( AndF Nothing
+              ( Just ( Just False :< MaybeT
+                       ( AndF Nothing
+                         ( Just ( Just False :< MaybeT ( LitF False ) ) ) ) ) ) )
 
    While the motivating use case to-date is debugging, the same infrastructure 
    (recursion schemes) needed for that may be useful for other purposes related 
-   to analysis of logical formulas and is exposed.
+   to analysis of logical formulas and is exposed. 
+
+   For example, 'Zusatz.Formula.Cofree' contains functions for identifying 
+   subformulas that match the "shape" (up to substitution of formulas for 
+   literals) of another formula.
+
+   >>> mkImplies p q = Or (Not p) q
+   >>> impliesEx = mkImplies (Lit True) (Lit False)
+   >>> oneMatch = Not impliesEx
+   >>> subtreeMatch impliesEx oneMatch
+      False :< NotF (True :< OrF (False :< NotF (False :< LitF True)) (False :< LitF False))
+   >>> multipleMatches = mkImplies impliesEx oneMatch
+   >>> pPrint $ subtreeMatch impliesEx multipleMatches
+      True :< OrF
+        ( False :< NotF
+          ( True :< OrF
+            ( False :< NotF ( False :< LitF True ) ) ( False :< LitF False ) ) )
+        ( False :< NotF
+          ( True :< OrF
+            ( False :< NotF ( False :< LitF True ) ) ( False :< LitF False ) ) )
+   >>> multipleMatches' = Id "foo" $ mkImplies (Id "bar" impliesEx) oneMatch
+   >>> pPrint $ subtreeMatch impliesEx multipleMatches'
+      True :< IdF "foo"  -- Note that the annotation of an 'IdF' matches its child's.
+        ( True :< OrF
+          ( False :< NotF
+            ( True :< IdF "bar"
+              ( True :< OrF
+                ( False :< NotF ( False :< LitF True ) ) ( False :< LitF False ) ) ) )
+          ( False :< NotF
+            ( True :< OrF
+              ( False :< NotF ( False :< LitF True ) ) ( False :< LitF False ) ) ) )
+
 license:               MIT
 license-file:          LICENSE
 author:                Eric Meinhardt
@@ -79,9 +125,11 @@ library
     DeriveTraversable
     FlexibleContexts
     FlexibleInstances
+    GeneralizedNewtypeDeriving
     ImportQualifiedPost
     NoImplicitPrelude
     ScopedTypeVariables
+    TupleSections
     TypeApplications
     TypeFamilies
     UnicodeSyntax
@@ -89,6 +137,7 @@ library
   exposed-modules:
     Zusatz.Formula
     Zusatz.Formula.Class
+    Zusatz.Formula.Optics
     Zusatz.Formula.Cofree
   build-depends:
       -- TODO Go through bounds more thoroughly.
@@ -104,6 +153,7 @@ library
     , transformers-compat
     , transformers
     , mtl
+    , optics
      -- dev dep
     , pretty-simple         ==4.1.*
 

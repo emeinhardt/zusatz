@@ -33,7 +33,7 @@
       flake = pkgs.zusatz.flake {
       };
     in flake // {
-      packages.default = flake.packages."zusatz:exe:zusatz";
+      packages.default = flake.packages."zusatz:lib:zusatz";
     });
   nixConfig = {
     # This sets the flake to use the IOG nix cache.

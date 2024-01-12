@@ -145,6 +145,7 @@ library
     , base-unicode-symbols  ==0.2.*
     , composition           ==1.0.*
     , containers            >= 0.2.0.1  && <0.8
+    , constrained-categories
     , ersatz                >= 0.5
     , recursion-schemes     >= 5.2
     , free                  >= 5.1

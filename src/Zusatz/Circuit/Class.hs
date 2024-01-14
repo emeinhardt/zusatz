@@ -1,11 +1,12 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE StarIsType #-}
 -- |
 
 module Zusatz.Circuit.Class where
 
--- import Prelude qualified as P
+import Prelude qualified as P
 import Prelude hiding
   ( id
   , (.)
@@ -14,7 +15,12 @@ import Prelude hiding
   , curry
   , uncurry
   , const
+  , foldMap
   )
+
+import Control.Applicative (liftA2)
+import Control.Monad ((<=<))
+import Control.Monad.State (State, get, put, modify)
 
 import Control.Category.Constrained
   ( Category ( Object
@@ -35,24 +41,25 @@ import Control.Category.Constrained
           , curry
           , apply
           )
-  , type (+)
-  , CoCartesian ( SumObjects
-                , ZeroObject
-                , coSwap
-                , attachZero
-                , detachZero
-                , coRegroup
-                , coRegroup'
-                , maybeAsSum
-                , maybeFromSum
-                , boolAsSum
-                , boolFromSum
-                )
-  , ObjectSum
-  , HasAgent ( AgentVal
-             , alg
-             , ($~)
-             )
+  , ObjectMorphism
+  -- , type (+)
+  -- , CoCartesian ( SumObjects
+  --               , ZeroObject
+  --               , coSwap
+  --               , attachZero
+  --               , detachZero
+  --               , coRegroup
+  --               , coRegroup'
+  --               , maybeAsSum
+  --               , maybeFromSum
+  --               , boolAsSum
+  --               , boolFromSum
+  --               )
+  -- , ObjectSum
+  -- , HasAgent ( AgentVal
+  --            , alg
+  --            , ($~)
+  --            )
   )
 import Control.Arrow.Constrained
   ( Morphism ( (***)
@@ -64,42 +71,67 @@ import Control.Arrow.Constrained
              , snd      -- exr
              , terminal -- it
              )
-  , WellPointed ( PointObject
-                , globalElement -- unitArrow
-                , unit
-                , const         -- const
-                )
-  , ObjectPoint
-  , MorphChoice ( (+++)
-                , left
-                , right
-                )
-  , PreArrChoice ( (|||) -- (▽)
-                 , coFst -- inl
-                 , coSnd -- inr
-                 )
-  , SPDistribute ( distribute   -- distl
-                 , unDistribute -- distr
-                 , boolAsSwitch
-                 , boolFromSwitch
-                 )
-  , (>>>)
-  , (<<<)
-  , choose
-  , ifThenElse
+  -- , WellPointed ( PointObject
+  --               , globalElement -- unitArrow
+  --               , unit
+  --               , const         -- const
+  --               )
+  -- , ObjectPoint
+  -- , MorphChoice ( (+++)
+  --               , left
+  --               , right
+  --               )
+  -- , PreArrChoice ( (|||) -- (▽)
+  --                , coFst -- inl
+  --                , coSnd -- inr
+  --                )
+  -- , SPDistribute ( distribute   -- distl
+  --                , unDistribute -- distr
+  --                , boolAsSwitch
+  --                , boolFromSwitch
+  --                )
+  -- , (>>>)
+  -- , (<<<)
+  -- , choose
+  -- , ifThenElse
   )
-import Control.Applicative (liftA2)
-import Control.Monad ((<=<))
-import Control.Monad.State (State, get, put, modify)
 
-class PreArrow k ⇒ BoolCat k where
-  notC ∷ Bool `k` Bool
-  andC, orC, xorC, impliesC, iffC, nandC, norC ∷ Bool `k` Bool
+
+
+class (PreArrow k)
+  ⇒ BoolCat k where
+  notC ∷ (Object k a) ⇒ a `k` a
+  andC, orC, xorC, impliesC, iffC, nandC, norC ∷
+    (Object k a, Object k (a,a), PairObjects k a a) ⇒ (a, a) `k` a
+
+  andC     = notC . orC  . (notC *** notC)
+  orC      = notC . andC . (notC *** notC)
+  xorC     = andC . (orC &&& notC . andC)
+  impliesC = orC  . first notC
+  iffC     = andC . (impliesC &&& impliesC . swap)
+  nandC    = notC . andC
+  norC     = notC . orC
+  {-# MINIMAL (notC, andC) | (notC, orC) #-}
+
+-- class (PreArrow k)
+--   ⇒ BoolCat k where
+--   notC ∷ (Object k a, Object k b) ⇒ a `k` b
+--   andC, orC, xorC, impliesC, iffC, nandC, norC ∷
+--     (Object k a, Object k (a,b), PairObjects k a b, SumObjects k a b) ⇒ (a, b) `k` (a + b)
+
+--   andC     = notC . orC  . (notC *** notC)
+--   orC      = notC . andC . (notC *** notC)
+--   xorC     = andC . (orC &&& notC . andC)
+--   impliesC = orC  . first notC
+--   iffC     = andC . (impliesC &&& impliesC . swap)
+--   nandC    = notC . andC
+--   norC     = notC . orC
+--   {-# MINIMAL (notC, andC) | (notC, orC) #-}
 
 
 -- TODO move this to Zusatz.Circuit.Graph
 
-data Graph a b = Graph (Ports a → GraphM (Ports b))
+data Graph a b = Graph { unGraph ∷ Ports a → GraphM (Ports b)}
 
 type GraphM = State (Port, [Comp])
 
@@ -122,39 +154,62 @@ instance Category Graph where
 
   Graph g . Graph f = Graph (g <=< f)
 
-
--- TODO
 instance Cartesian Graph where
-  swap ∷ (a, b) `k` (b, a)
-  swap = undefined
+  swap ∷ (ObjectPair Graph a b, ObjectPair Graph b a)
+       ⇒ (a, b) `Graph` (b, a)
+  swap = (id . snd) &&& (id . fst)
 
-  attachUnit ∷ a `k` (a, UnitObject Graph)
-  attachUnit = undefined
+  attachUnit ∷ (ObjectPair Graph a ())
+             ⇒ a `Graph` (a, ())
+  attachUnit = id &&& terminal
 
-  detachUnit ∷ (a, UnitObject k) `k` a
-  detachUnit = undefined
+  detachUnit ∷ (ObjectPair Graph a ())
+             ⇒ (a, ()) `Graph` a
+  detachUnit = id . fst
 
-  regroup ∷ (a, (b, c)) `k` ((a, b), c)
-  regroup = undefined
+  regroup ∷ ( ObjectPair Graph a b    , ObjectPair Graph b     c
+            , ObjectPair Graph a (b,c), ObjectPair Graph (a,b) c)
+          ⇒ (a, (b, c)) `Graph` ((a, b), c)
+  regroup = (fst &&& (fst . snd)) &&& (snd . snd)
 
-  regroup' ∷ ((a, b), c) `k` (a, (b, c))
-  regroup' = undefined
+  regroup' ∷ ( ObjectPair Graph a b    , ObjectPair Graph b     c
+             , ObjectPair Graph a (b,c), ObjectPair Graph (a,b) c)
+           ⇒ ((a, b), c) `Graph` (a, (b, c))
+  regroup' = (fst . fst) &&& ((snd . fst) &&& snd)
 
-
--- TODO
 instance Morphism Graph where
-  (***) ∷ a b c → a b' c' → a (b, b') (c, c')
-  (Graph f) *** (Graph g) = undefined
+  (***) ∷ (ObjectPair Graph a a', ObjectPair Graph b b')
+        ⇒ a `Graph` b → a' `Graph` b' → (a, a') `Graph` (b, b')
+  f *** g = (f . fst) &&& (g . snd)
 
--- TODO
--- instance PreArrow Graph where
---   fst = Graph (\(PairP a _) → return a)
---   snd = Graph (\(PairP _ b) → return b)
+instance PreArrow Graph where
+  fst ∷ ObjectPair Graph a b
+      ⇒ (a,b) `Graph` a
+  fst = Graph (\(PairP a _) → return a)
 
---   (Graph f) &&& (Graph g) = Graph (liftA2 (liftA2 PairP) f g)
+  snd ∷ ObjectPair Graph a b
+      ⇒ (a,b) `Graph` b
+  snd = Graph (\(PairP _ b) → return b)
 
---   terminal = Graph (P.const (return UnitP))
+  (&&&) ∷ a `Graph` b → a `Graph` b' -> a `Graph` (b, b')
+  (Graph f) &&& (Graph g) = Graph (liftA2 (liftA2 PairP) f g)
 
+  terminal ∷ a `Graph` ()
+  terminal = Graph (P.const (return UnitP))
+
+-- instance Curry Graph where
+--   uncurry ∷ (ObjectPair Graph a b)
+--          ⇒ a `Graph` (b `Graph` c) → (a, b) `Graph` c
+--   -- uncurry = undefined
+--   uncurry = undefined
+--   -- uncurry (Graph g) = Graph (\(PairP a b) → do {FunP (Graph f) ← g a ; f b})
+-- --   -- uncurry (Graph g) = Graph (\(PairP a b) → do $
+-- --   --                                             FunP (Graph f) ← g a
+-- --   --                                             f b)
+--   -- curry ∷ (ObjectPair Graph a b)
+--   --       ⇒ (a, b) `Graph` c → a `Graph` (b `Graph` c)
+--   -- curry = undefined
+--   -- curry (Graph f) = Graph (\a → )
 
 genPort ∷ GraphM Port
 genPort = do
@@ -179,16 +234,15 @@ genComp name =
            modify (second (Comp name a b :))
            return b)
 
--- TODO
--- instance BoolCat Graph where
---   notC = genComp "¬"
---   andC = genComp "∧"
---   orC = genComp "∨"
---   xorC = genComp "⊕"
---   impliesC = genComp "⇒"
---   iffC = genComp "≡"
---   nandC = genComp "↑"
---   norC  = genComp "↓"
+instance BoolCat Graph where
+  notC     = genComp "¬"
+  andC     = genComp "∧"
+  orC      = genComp "∨"
+  xorC     = genComp "⊕"
+  impliesC = genComp "⇒"
+  iffC     = genComp "≡"
+  nandC    = genComp "↑"
+  norC     = genComp "↓"
 
 
 

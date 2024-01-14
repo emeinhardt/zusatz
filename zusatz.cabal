@@ -139,6 +139,7 @@ library
     Zusatz.Formula.Class
     Zusatz.Formula.Optics
     Zusatz.Formula.Cofree
+    Zusatz.Circuit.Class
   build-depends:
       -- TODO Go through bounds more thoroughly.
       base                  >= 4.13.0.0 && <5.0
@@ -153,6 +154,9 @@ library
     , data-fix
     , transformers-compat
     , transformers
+    , trivial-constraint
+    , singletons
+    , tagged
     , mtl
     , optics
      -- dev dep
